@@ -1,5 +1,5 @@
 import React, { FormEvent, useContext, useEffect, useState } from 'react'
-import { Button, Form, Segment } from 'semantic-ui-react'
+import { Button, Form, Grid, Segment } from 'semantic-ui-react'
 import { IActivity } from '../../../app/models/activity'
 import {v4 as uuid} from'uuid';
 import ActivityStore from '../../../app/stores/activityStore'
@@ -27,25 +27,6 @@ export const ActivityForm: React.FC<RouteComponentProps<DetailsParam>> = observe
         }
 
     }, [cleanActivity, initialFormState, loadActivity, match.params.id])
-
-    const initializeForm = () => {
-
-        if (initialFormState) {
-            return initialFormState;
-        }
-        else {
-            return {
-                id: '',
-                title: '',
-                category: '',
-                description: '',
-                date: '',
-                city: '',
-                venue: ''
-            };
-        }
-
-    };
 
     const [activity, setActivity] = useState<IActivity>({
         id: '',
@@ -81,7 +62,9 @@ export const ActivityForm: React.FC<RouteComponentProps<DetailsParam>> = observe
     };
 
     return (
-        <Segment clearing>
+        <Grid>
+            <Grid.Column width={10}>
+            <Segment clearing>
             <Form onSubmit = {handleSubmit}>
                 <Form.Input onChange={handleInputChange} name='title' placeholder='Title' value={activity.title}></Form.Input>
                 <Form.TextArea onChange={handleInputChange} name='description' rows={2} placeholder='Description' value={activity.description}></Form.TextArea>
@@ -93,6 +76,9 @@ export const ActivityForm: React.FC<RouteComponentProps<DetailsParam>> = observe
                 <Button onClick={()=>{history.push('/activities')}} floated='right' content='Cancel'></Button>
             </Form>
         </Segment>
+            </Grid.Column>
+        </Grid>
+        
     )
 })
 
