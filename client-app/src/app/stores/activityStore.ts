@@ -1,156 +1,143 @@
-import { observable, action, makeAutoObservable, configure, runInAction } from "mobx";
-import { createContext, SyntheticEvent } from "react";
-import agent from "../api/agent";
-import { IActivity } from "../models/activity";
+import { observable, action,  configure, runInAction,  makeAutoObservable } from 'mobx';
+import { createContext, SyntheticEvent } from 'react';
+import { IActivity } from '../models/activity';
+import agent from '../api/agent';
+import { history } from '../..';
+import { toast } from 'react-toastify';
 
-configure({ enforceActions: 'always' });
+configure({enforceActions: 'always'});
 
 class ActivityStore {
+  @observable activityRegistry = new Map();
+  @observable activity: IActivity | null = null;
+  @observable loadingInitial = false;
+  @observable submitting = false;
+  @observable target = '';
+    
+  get activitiesByDate() {
+    return this.groupActivitiesByDate(Array.from(this.activityRegistry.values()))
+  }
 
-    @observable activityRegistery = new Map();
-    @observable activity: IActivity | null = null;
-    @observable loadingInitial = false;
-    @observable submitting = false;
-    @observable target = '';
+  groupActivitiesByDate(activities: IActivity[]) {
+    const sortedActivities = activities.sort(
+      (a, b) => a.date.getTime() - b.date.getTime()
+    )
+    return Object.entries(sortedActivities.reduce((activities, activity) => {
+      const date = activity.date.toISOString().split('T')[0];
+      activities[date] = activities[date] ? [...activities[date], activity] : [activity];
+      return activities;
+    }, {} as {[key: string]: IActivity[]}));
+  }
 
-    get activitiesByDate() {
-        return this.groupActivityByDate(Array.from(this.activityRegistery.values()));
+  @action loadActivities = async () => {
+    this.loadingInitial = true;
+    try {
+      const activities = await agent.Activities.list();
+      runInAction(() => {
+        activities.forEach(activity => {
+          activity.date = new Date(activity.date);
+          this.activityRegistry.set(activity.id, activity);
+        });
+        this.loadingInitial = false;
+      })
+    } catch (error) {
+      runInAction(() => {
+        this.loadingInitial = false;
+      })
     }
+  };
 
-    groupActivityByDate = (activities: IActivity[])=>{
-        const sortedActivities = activities.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
-        
-        return Object.entries(sortedActivities.reduce((activities,activity)=>{
-            const date = activity.date.split('T')[0];
-            activities[date] = activities[date] ? [...activities[date],activity]:[activity];
-            return activities;
-        },{} as {[key:string]:IActivity[]}));
+  @action loadActivity = async (id: string) => {
+    let activity = this.getActivity(id);
+    if (activity) {
+      this.activity = activity;
+      return activity;
+    } else {
+      this.loadingInitial = true;
+      try {
+        activity = await agent.Activities.details(id);
+        runInAction(() => {
+          activity.date = new Date(activity.date);
+          this.activity = activity;
+          this.activityRegistry.set(activity.id, activity);
+          this.loadingInitial = false;
+        })
+        return activity;
+      } catch (error) {
+        runInAction(() => {
+          this.loadingInitial = false;
+        })
+        console.log(error);
+      }
     }
+  }
 
-    @action loadActvities = async () => {
-        this.loadingInitial = true;
+  @action clearActivity = () => {
+    this.activity = null;
+  }
 
-        try {
+  getActivity = (id: string) => {
+    return this.activityRegistry.get(id);
+  }
 
-            const activities = await agent.Activities.list();
-            runInAction(() => {
-                activities.forEach((activity) => {
-                    activity.date = activity.date.split('.')[0];
-                    this.activityRegistery.set(activity.id, activity);
-                });
-                this.loadingInitial = false;
-            });
-
-        } catch (error) {
-
-            runInAction(() => {
-                this.loadingInitial = false;
-            });
-            console.log(error);
-
-
-        }
-
+  @action createActivity = async (activity: IActivity) => {
+    this.submitting = true;
+    try {
+      await agent.Activities.create(activity);
+      runInAction(() => {
+        this.activityRegistry.set(activity.id, activity);
+        this.submitting = false;
+      })
+      history.push(`/activities/${activity.id}`)
+    } catch (error) {
+      runInAction(() => {
+        this.submitting = false;
+      })
+      toast.error('Problem submitting data');
+      console.log(error.response);
     }
+  };
 
-    @action loadActivity = async (id: string) => {
-
-        let activity = this.getActivity(id);
-
-        if (activity) {
-            this.activity = activity;
-        } else {
-            this.loadingInitial = true;
-            try {
-
-                activity = await agent.Activities.details(id);
-                runInAction(() => {
-                    this.activity = activity;
-                    this.loadingInitial = false;
-                })
-            } catch (error) {
-                runInAction(() => {
-                    this.loadingInitial = false;
-                })
-                
-            }
-        }
+  @action editActivity = async (activity: IActivity) => {
+    this.submitting = true;
+    try {
+      await agent.Activities.update(activity);
+      runInAction(() => {
+        this.activityRegistry.set(activity.id, activity);
+        this.activity = activity;
+        this.submitting = false;
+      })
+      history.push(`/activities/${activity.id}`)
+    } catch (error) {
+      runInAction(() => {
+        this.submitting = false;
+      })
+      toast.error('Problem submitting data');
+      console.log(error);
     }
+  };
 
-    getActivity = (id: string) => {
-        return this.activityRegistery.get(id);
+  @action deleteActivity = async (event: SyntheticEvent<HTMLButtonElement>, id: string) => {
+    this.submitting = true;
+    this.target = event.currentTarget.name;
+    try {
+      await agent.Activities.delete(id);
+      runInAction( () => {
+        this.activityRegistry.delete(id);
+        this.submitting = false;
+        this.target = '';
+      })
+    } catch (error) {
+      runInAction(() => {
+        this.submitting = false;
+        this.target = '';
+      })
+      console.log(error);
     }
-
-    @action cleanActivity = () =>{
-        this.activity = null;
-    }
-    @action createActivity = async (activity: IActivity) => {
-        this.submitting = true;
-        try {
-
-            await agent.Activities.create(activity);
-            runInAction(() => {
-                this.activityRegistery.set(activity.id, activity);
-                this.submitting = false;
-            })
-
-
-        } catch (error) {
-            runInAction(() => {
-                this.submitting = false;
-            });
-            console.log(error);
-        }
-    }
-
-    @action editActivity = async (activity: IActivity) => {
-        this.submitting = true;
-        try {
-
-            await agent.Activities.update(activity);
-            runInAction(() => {
-                this.activityRegistery.set(activity.id, activity);
-                this.activity = activity;
-                this.submitting = false;
-            });
-        } catch (error) {
-            runInAction(() => {
-                this.submitting = false;
-            });
-            console.log(error);
-
-        }
-
-    }
-
-    @action deleteActivity = async (event: SyntheticEvent<HTMLButtonElement>, id: string) => {
-
-        this.submitting = true;
-        this.target = event.currentTarget.name;
-        try {
-            await agent.Activities.delete(id);
-            runInAction(() => {
-                this.activityRegistery.delete(id);
-                this.submitting = false;
-                this.target = '';
-            })
-
-        } catch (error) {
-
-            runInAction(() => {
-                this.submitting = false;
-                this.target = '';
-            });
-            console.log(error);
-
-        }
-
-    }
-    constructor() {
-
-        makeAutoObservable(this);
-
-    }
+  }
+  constructor(){
+      makeAutoObservable(this)
+  }
 }
 
-export default createContext(new ActivityStore())
+export default createContext(new ActivityStore());

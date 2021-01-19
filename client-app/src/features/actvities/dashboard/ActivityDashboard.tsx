@@ -10,7 +10,7 @@ export const ActivityDashboard: React.FC = observer(() => {
 
     useEffect(() => {
   
-      activityStore.loadActvities();
+      activityStore.loadActivities();
   
   
     }, [activityStore]);
